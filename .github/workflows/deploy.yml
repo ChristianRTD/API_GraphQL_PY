@@ -1,0 +1,57 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out the code
+      uses: actions/checkout@v3
+
+    - name: Deploy to EC2
+      uses: easingthemes/ssh-deploy@main
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        REMOTE_HOST: ${{ secrets.HOST_DNS }}
+        REMOTE_USER: ${{ secrets.EC2_USER }}
+        TARGET: ${{ secrets.TARGET_DIR }}
+
+    - name: Executing remote ssh commands using ssh key
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST_DNS }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          # Detener el servicio de la aplicación si está corriendo
+          pm2 delete my-app || echo "No existing process found"
+          
+          # Ir al directorio de la aplicación
+          cd /path/to/your/application
+
+          # Obtener el código más reciente desde la rama main
+          git pull origin main
+
+          # Crear un entorno virtual si no existe
+          if [ ! -d "venv" ]; then
+            python3 -m venv venv
+          fi
+
+          # Activar el entorno virtual
+          source venv/bin/activate
+
+          # Instalar dependencias desde el requirements.txt
+          pip install -r requirements.txt
+
+          # Iniciar la aplicación con gunicorn
+          pm2 start gunicorn --name "my-app" -- workers 3 --bind 0.0.0.0:8000 app:app
+
+          # Guardar el estado de pm2
+          pm2 save
+          
+          echo "Application is running in the background."
